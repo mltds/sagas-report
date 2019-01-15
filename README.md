@@ -1,9 +1,8 @@
 # sagas-report
-```
-想要写一个SAGAS框架，翻出来 1987 年的sagas论文看看，英语渣顺便翻译下
-https://www.cs.princeton.edu/research/techreps/TR-070-87
-DOING中
-```
+
+想要写一个SAGAS框架，翻出来 1987 年的sagas论文看看，英语渣顺便翻译下，DOING...
+[Princeton University Report ID: TR-070-87](https://www.cs.princeton.edu/research/techreps/TR-070-87)
+
 -----------------------
 
 # SAGAS
@@ -36,7 +35,7 @@ Princeton, NJ.08544
 >January 7, 1987
  
 
-# SAGAS
+## SAGAS
 Hector Garcia-Molina  
 Kenneth Salem  
 
@@ -75,5 +74,6 @@ Princeton, N.J. 08544
 但是, 我们不希望将 T 简单地作为多个独立事务的集合提交到数据库中 (dbms)，因为我们仍然希望 T 是一个单元, 要么全部成功或全部失败。我们不希望事务 T 在数据库中五个座位只保留了三个，然后（由于崩溃）而什么也做不了。另一方面，我们希望DBMS 能够保证 T 将所有预定都成功，或者如果 T 必须停止，那么也将取消所有已预定座位。
 
 >However, we do not wish to submit T to the database management system (DBMS) simply as a collection of independent transactions because we still want T to be a unit that is either successfully completed or not done at all. We would not be satisfied with a DBMS that would allow T to reserve three out of five seats and then (due to a crash) do nothing more. On the other hand, we would be satisfied with a DBMS that guaranteed that T would make all of its reservations, or would cancel any reservations made if T had to be suspended.
+
 
 
