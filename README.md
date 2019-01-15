@@ -1,10 +1,12 @@
 # sagas-report
-SAGAS论文翻译 
+```
+想要写一个SAGAS框架，翻出来 1987 年的sagas论文看看，英语渣顺便翻译下
 https://www.cs.princeton.edu/research/techreps/TR-070-87
-DOING
+DOING中
+```
+-----------------------
 
-
-#SAGAS
+# SAGAS
 Hector Garica-Molina  
 Kenneth Salem  
 
@@ -20,14 +22,14 @@ Princeton University
 Princeton, NJ.08544  
 
 
-# 摘要
+## 摘要
 
 一个长时间事务会在相对较长的时间内占用数据库资源，明显的阻碍了较短的和公用的其他事务完成。为了缓解这些问题, 我们提出一个 saga的概念。它是由多个有序的事务组成、并且与其他事务可以交错的一个长时间事务（LLT），数据库管理系统保证成功完成 saga 中的所有事务, 或对部分进行事务补偿。saga的概念 和它的实施相对简单, 但它们有可能显著提高性能。我们分析了与 sagas 相关的各种实施问题，包括如何在不直接支持它们的现有系统上运行它们。我们进行了数据库和 LLT技术讨论, 使 sagas成为LLT解决方案的可能。
 
 1987年1月7日
  
 
-># ABSTRACT
+>## ABSTRACT
 >
 >Long lived transactions (LLTS) hold on to database resources for relatively long periods of time, significantly delaying the termination of shorter and more common transactions. To alleviate these problems we propose the notion of a saga. A LLT is a saga if it can be written as a sequence of transactions that can be interleaved with other transactions. The database management system guarantees that either all the transactions in a saga are successfully completed or compensating transactions are run to amend a partial execution. Both the concept of saga and its implementation are relatively simple but they have the potential to improve performance significantly. We analyze the various implementation issues related to sagas, including how they can be run on an existing system that does not directly support them. We also discuss techniques for database and LLT design that make it feasible to break up LLTs into sagas.
 >
@@ -42,11 +44,11 @@ Department of Computer Science
 Princeton University  
 Princeton, N.J. 08544  
 
-# 1 简介
+## 1 简介
 
 顾名思义，一个执行长生命周期的事务，即使没有其他事务的干扰，也需要大量的时间，可能需要数小时或数天。一个长生命周期事务，或者说 LLT，与大多数其他事务相比, 持续时间较长, 因为它访问了许多数据库对象，它有很长的计算过程，或因用户输入的停顿，或者多种因素的组合。举一个TTL的例子，根据银行交易记录生成每月账目报表, 用来处理保险公司的索赔，这个事务需要收集整个数据库的信息[Gray81a]。
 
-># 1 INTRODUCTION
+>## 1 INTRODUCTION
 
 >As its name indicates, a long lived transaction is a transaction whose execution, even without interference from other transactions, takes a substantial amount of time, possibly on the order of hours or days. A long lived transaction, or LLT, has a long duration compared to the majority of other transactions either because it accesses many database objects, it has lengthy computations, it pauses for inputs from the users, or a combination of these factors. Examples of LLTs are transactions to produce monthly account statements at a bank transactions to process claims at an insurance company, and transactions to collect statistics over an entire database [Gray81a].
 
