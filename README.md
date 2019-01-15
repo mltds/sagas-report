@@ -3,6 +3,7 @@
 想要写一个基于SAGAS理念的分布式事务框架，翻出来 1987 年的sagas论文看看，翻译DOING...  
 [Princeton University Report ID: TR-070-87](https://www.cs.princeton.edu/research/techreps/TR-070-87)  
 我是英语渣，有翻译错误或更好的翻译，请 issue 留言，或者给我发邮件 alex.sun.email@gmail.com 来一起完成这项工作
+
 -----------------------
 
 # SAGAS
