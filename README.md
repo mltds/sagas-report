@@ -92,16 +92,16 @@ Princeton, N.J. 08544
 >To amend partial executions, each saga transaction Ti should be provided with a compensating transaction Ci. The compensating transaction undoes, from a semantic point of view, any of the actions performed by Ti, but does not necessarily return the database to the state that existed when the execution of Ti began. In our airline example, if Ti, reserves a seat on a flight, then Ci can cancel the reservation (say by subtracting one from the number of reservations and performing some other checks). But Ci cannot simply store in the database the number of seats that existed when Ti ran because other transactions could have run between the time Ti reserved the seat and Ci canceled the reservation, and could have changed the number of reservations for this flight.
 
 一旦将 saga 的 T1, T2, ..., Tn 的取消补偿事务定义为 C1, C2, ..., Cn-1 ，那么 这个系统将会作出如下保证，任何一个序列  
-　　　　　　　　T1, T2, ..., Tn　　
-　　　　　　　　（最好是一个）或者这个序列　　
-　　　　　　　　T1, T2, ..., Tj, Cj, ..., C2, C1　　
-对于0 ≤ j < n 将被执行。
+　　　　　　　　T1, T2, ..., Tn  
+　　　　　　　　（最好是一个）或者这个序列  
+　　　　　　　　T1, T2, ..., Tj, Cj, ..., C2, C1  
+对于0 ≤ j < n 将被执行。  
 
 >Once compensating transactions C1, C2, ..., Cn-1 are defined for saga T1, T2, ..., Tn, then the system can make the following guarantee. Either the sequence
-T1, T2, ..., Tn　　
->　　　　　　　　(which is the preferable one) or the sequence　　
->　　　　　　　　T1, T2, ..., Tj, Cj, ..., C2, C1　　
->　　　　　　　　for some 0 ≤ j < n will be executed.　　
+T1, T2, ..., Tn  
+>　　　　　　　　(which is the preferable one) or the sequence  
+>　　　　　　　　T1, T2, ..., Tj, Cj, ..., C2, C1  
+>　　　　　　　　for some 0 ≤ j < n will be executed.  
 
 
 
