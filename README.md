@@ -201,4 +201,33 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 
 
 
+## 4. 逆向恢复
+
+>## 4. BACKWARD RECOVERY
+
+当saga故障中断时, 有两种选择: 补偿已执行的事务向后恢复，或执行还未执行的事务转而恢复正常。 (当然, 在所有情况下, 正向恢复可能不是一种选择。)对于向后恢复，系统需要补偿事务, 对于正向恢复, 系统需要保存点。在本节中, 我们将介绍如何实现纯逆向恢复, 后面再讨论混合逆向正向和纯正向恢复。
+
+>When a failure interrupts a saga, there are two choices: compensate for the executed transactions, backward recovery or execute the missing transactions, forward recovery. (Of course, forward recovery may not be an option in all situations.) For backward recovery the system needs compensating transactions, for forward recovery it needs save-points. In this section we will describe how pure backward recovery can be implemented, the next will discuss mixed backward forward and pure forward recovery.
+
+在DBMS中, saga执行组件 (SEC) 管理着sagas。此组件调用常规事务执行组件 (TEC), 该组件管理各个事务的执行。SEC的运作类似于 TEC的操作: SEC作为一个单元执行一系列事务, 而TEC作为一个 (原子) 单元执行一系列操作。这两个组件都需要一个日志来记录 sagas 和事务的活动。事实上, 将这两个日志合并为一个日志是很方便的, 我们将假设这里的情况就是这样。我们还将假设日志是双重的可靠性。请注意, SEC不需要并发控制, 因为它控制的事务可以与其他事务交错。
+
+>Within the DBMS, a saga execution component (SEC) manages sagas. This component calls on the conventional transaction execution component(TEC), which manages the execution of the individual transactions. The operation of the SEC is similar to that of the TEC: the SEC executes a series of transactions as a unit, while the TEC executes a series of actions as an (atomic) unit. Both components require a log to record the activities of sagas and transactions. As a matter of fact, it is convenient to merge both logs into a single one, and we will assume that this is the case here. We will also assume that the log is duplexed for reliability. Note that the SEC needs no concurrency control because the transactions it controls can be interleaved with other transactions.
+
+所有saga命令和数据库操作都通过 SEC 进行。在执行任何操作之前, 每个 saga 命令 (例如 begin-saga) 都会记录在日志中。命令中包含的任何参数 (例如, 停止事务命令中的补偿事务标识) 也记录在日志中。开始事务和停止事务命令以及所有数据库操作, 被转发到 TEC, 它以传统的方式处理它们 [gray78a]
+
+>All saga commands and database actions are channeled through the SEC. Each saga command (e.g. begin-saga) is recorded in the log before any action is taken. Any parameters contained in the commands (e.g. the compensating transaction identification in an end-transaction command) are also recorded in the log. The begin- transaction and end-transaction commands as well as all database actions, are forwarded to the TEC, which handles them in a conventional way [Gray78a]
+
+当 SEC 收到中止传奇命令时, 它将启动逆向恢复。为了说明这一点, 让我们考虑一个已经执行交易 T1 和 T2 的传奇, 并且在T3执行的中途向 SEC发出一个中止saga的命令。SEC在日志中记录该命令 (以防止回滚过程中崩溃), 然后指示 TEC中止当前事务 T3。使用常规技术回滚此事务, 例如, 通过将 "之前" 值 (在日志中找到) 存储回数据库。
+
+>When the SEC receives an abort-saga command it initiates backward recovery. To illustrate, let us consider a saga that has executed transactions T1 and T2, and that halfway through the execution of T3 issues an abort-saga command to the SEC. The SEC records the command in the log (to protect against a crash during roll back) and then instructs the TEC to abort the current transaction T3. This transaction is rolled back using conventional techniques, e.g., by storing the “before" values (found in the log) back into the database.
+
+接下来，SEC会查询日志，并命令执行补偿事务C2和C1，如果这些事务的参数在日志中，则会使用这些参数。这两个补偿事务执行方式就像其他事务一样，当然，关于他们何时开始和提交的信息记录到日志中取决于TEC。（如果在此期间出现崩溃，系统将能够知道还有哪些工作要做。）当C1提交后，这个saga将会终止。日志中会记录一个信息，类似于由结束saga的命令创建的信息。
+
+
+>Next the SEC consults the log and orders the execution of compensating transactions C2 and C1. If the parameters for these transactions are in the log, they are extracted and passed in the call. The two transactions are executed just like other transactions, and of course, the information as to when they begin and commit is recorded in the log by the TEC. (If there is a crash during this time, the system will then be able to know what work remains to be done.) When C1 commits, the saga terminates. An entry is made in the log, similar to the one created by the end-saga command.
+
+该日志还用于从崩溃中恢复。崩溃后, 首先调用 TEC 来清理挂起的事务。一旦所有事务中止或提交, SEC 将评估每个saga的状态。如果一个saga有相应的开始记录和结束记录在日志中，那么这个saga是完整的，并且必须不能再改变它。如果缺少结束记录, 则该saga将被中止。通过扫描日志, sec 发现了最后一次成功执行并且没有补偿的事务。那么要补偿这个事务和之前的所有事务。
+
+>The log is also used to recover from crashes. After a crash, the TEC is first invoked to clean up pending transactions. Once all transactions are either aborted or committed, the SEC evaluates the status of each saga. If a saga has corresponding begin-saga and end-saga entries in the log, then the saga completed and no further action is necessary. If there is a missing end-saga entry, then the saga is aborted. By scanning the log the SEC discovers the identity of the last successfully executed and uncompensated transaction. Compensating transactions are run for this transaction and all preceeding ones.
+
 
