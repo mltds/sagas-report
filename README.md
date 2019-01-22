@@ -231,3 +231,42 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 >The log is also used to recover from crashes. After a crash, the TEC is first invoked to clean up pending transactions. Once all transactions are either aborted or committed, the SEC evaluates the status of each saga. If a saga has corresponding begin-saga and end-saga entries in the log, then the saga completed and no further action is necessary. If there is a missing end-saga entry, then the saga is aborted. By scanning the log the SEC discovers the identity of the last successfully executed and uncompensated transaction. Compensating transactions are run for this transaction and all preceeding ones.
 
 
+## 5. 正向恢复
+
+>## 5. FORWARD RECOVERY
+
+对于正向恢复，SEC要求所有缺失的交易都有可靠的代码副本和一个保存点。这个保存点会被用于应用程序或者系统，具体取决于是哪个中止了saga。（回忆一下，存储点标识符可以作为参数传递到 abort-saga 命令中。）在一个系统崩溃的情况中，恢复组件可以为每个saga指定最近期的保存点。
+
+>For forward recovery, the SEC requires a reliable copy of the code for all missing transactions plus a save-point. The save point to be used may be specified by the application or by the system, depending on which aborted the saga. (Recall that a save-point identifier can be included as a parameter to the abort-saga command.)In the case of a system crash, the recovery component can specify the most recent save point for each active saga.
+
+为了说明SEC在这种情况下的操作，请考虑一个执行了事务T1，T2，并有一个保存点，然后又执行了事务T3。然后在执行T4时系统崩溃了。恢复后，系统必须首先执行一个逆向恢复到保存点（中止T4并且运行补偿C3）。确保代码运行T3、T4、等等后续事务是可用的之后，SEC在日志中记录了它决定重启saga，我们叫这种为混合恢复。
+
+>To illustrate the operation of the SEC in this case, consider a saga that executes transactions T1, T2, a save-point command, and transaction T3. Then during the execution of transaction T4 the system crashes. Upon recovery, the system must first perform a backward recovery to the save-point (aborting T4 and running C3). After ensuring that the code for running T3,T4, ... is available, the SEC records in the log it decision to restart and restarts the saga. We call this backward/forward recovery.
+
+如第2节所述, 如果在每次交易开始时自动获取保存点, 则纯正向恢复是可行的。如果我们同时禁止使用 abrt-saga 命令, 那么就没有必要执行逆向恢复。(abort-transaction命令仍然是可以接受执行的。 这样做的好处是消除了补偿事务, 在某些应用程序中可能很难编写 (见第9节)。
+
+>As mentioned in Section 2, if save-points are automatically taken at the beginning of every transaction, then pure forward recovery is feasible. If we in addition prohibit the use of abort-saga commands, then it becomes unnecessary to ever perform back- ward recovery. (Abort-transaction commands would still be acceptable.) This has the advantage of eliminating the need for compensating transactions, which may be difficult to write in some applications (see Section 9).
+
+在这种情况下，SEC成为一个简单的“持久”事务执行器，类似于持久性消息传输机制[Hamm80a]。 每次崩溃后，对于每个活动的saga，SEC指示TEC中止最后执行的事务，然后在此事务开始时重新启动 saga。
+
+>In this case the SEC becomes a simple “persistent” transaction executor, similar to persistent message transmission mechanisms [Hamm80a]. After every crash, for every active saga, the SEC instructs the TEC to abort the last executing transaction, and then restarts the saga at the point where this transaction had started
+
+如果我们只将saga视为包含对各个事务程序的一系列调用的文件，我们可以进一步简化这一过程。 这里不需要显式的开始或结束 saga，也不需要开始或结束事务命令。 saga从文件中的第一个调用开始，到最后一个调用结束。 此外，每次调用都是一次事务。 正在运行的saga的状态只是正在执行的事务的编号。 这意味着系统可以在每次交易后以很少的成本获取保存点。
+
+>We can simplify this further if we simply view a saga as a file containing a sequence of calls to individual transaction programs. Here there is no need for explicit begin or end saga nor begin or end transaction commands. The saga begins with the first call in the file and ends with the last one. Furthermore, each call is a transaction. The state of a running saga is simply the number of the transaction that is executing. This means that the system can take save-points after each transaction with very little cost.
+
+这种纯的正向恢复方法对于总能成功的简单LLT非常有用。 计算账户利息可能是此类LLT的一个例子。 单个帐户的利息计算可能失败（通过中止事务命令），但其余计算将不受影响
+
+>Such pure forward recovery methods would be useful for simple LLTs that always succeed. The LLT that computes interest payments for back accounts may be an example of such a LLT. The interest computation on an individual account may fail (through an abort-transaction command), but the rest of the computations would proceed unaffected.
+
+使用操作系统术语，上述事务文件模型可以称为简单的EXEC或SCRIPT。 持久性SCRIPT的想法在操作系统中也很有用，以确保成功执行命令集合（假设每个命令作为事务执行）。 例如，典型的文本处理和打印作业包括几个步骤（例如，在UNIX中，方程处理，转发，打印）。 每个步骤都会生成一个或多个由以下步骤使用的文件。 持久性SCRIPT将允许用户启动长文本处理作业然后回家，相信系统会将它完成。
+
+>Using operating systems terminology, the transaction file model described above could be called a simple EXEC or SCRIPT. The idea of a persistent SCRIPT would also be useful in an operating system to ensure that a collection of commands were successfully executed (assuming that each command executed as a transaction). For example, a typical text processing and printing job consists of several steps (e.g., in UNIX, equation processing, troffing, printing). Each step produces one or more files that are used by the following steps. A persistent SCRIPT would allow a user to start a long text processing job and go home, confident that the system would complete it.
+
+在这种情况下, 我们还必须假设, 在saga中的每一个子事务如果它被重试足够多的次数，最终将会成功,。
+
+>In this case we must also assume that every sub-transaction in the saga will eventually succeed if it is retried enough times.
+
+
+
+
