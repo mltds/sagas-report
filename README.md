@@ -268,5 +268,34 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 >In this case we must also assume that every sub-transaction in the saga will eventually succeed if it is retried enough times.
 
 
+## 6. 其他错误
+
+>## 6. OTHER ERRORS
+
+到目前为止，我们假设用户提供的补偿事务代码中没有错误。 但是如果由于错误而无法成功完成补偿事务（例如，它尝试读取不存在的文件，或者代码中存在错误）会发生什么？ 事务可能会中止，但如果它再次运行，它可能会遇到相同的错误。 在这种情况下，系统卡住：它不能中止事务，也不能完成它。 如果在纯正向补偿方案中事务有错误，同样会出现类似情况。
+
+>Up to this point we have assumed that the user-provided code in compensating transactions does not have bugs. But what happens if a compensating transaction cannot be successfully completed due to errors (e.g., it tries to read a file that does not exist, or there is a bug in the code)? The transaction could be aborted, but if it were run again it would probably encounter the same error. In this case, the system is stuck: it cannot abort the transaction nor can it complete it. A similar situation occurs if in a pure forward scenario a transaction has an error.
+
+一种可能的解决方案是使用类似恢复块[Ande81a，Horn74a]的软件容错技术。 恢复块是在主块中检测到故障的情况下提供的备用或辅助代码块。 如果检测到故障，则系统重置为其原始状态，并执行辅助块。 辅助块旨在使用不同的算法或技术实现与主要逻辑相同的结果，希望规避掉主流程的故障。
+
+>One possible solution is to make use of software fault tolerant techniques along the lines of recovery blocks [Ande81a, Horn74a]. A recovery block is an alternate or secondary block of code that is provided in case a failure is detected in the primary block. If a failure is detected the system is reset to its preprimary state and the secondary block is executed. The secondary block is designed to achieve the same end as the primary using a different algorithm or technique, hopefully avoiding the primary's failure. 
+
+恢复块的想法很容易转化为saga框架。事务是自然的程序块, 由 TEC提供失败事务的回滚功能。saga应用程序可以控制恢复块的执行。 中止事务 (或通知其事务已中止) 后, 应用程序要么中止saga, 要么尝试另一个事务, 要么重试主事务。请注意, 补偿事务也可以为其提供备用事务, 以使中止 sagas 更可靠。
+
+>The recovery block idea translates very easily into the framework of sagas. Transactions are natural program blocks, and rollback capability for failed transactions is provided by the TEC. The saga application can control recovery block execution. After it aborts a transaction (or is notified that its transaction has been aborted), the application either aborts the saga, tries an alternative transaction, or retries the primary. Note that compensating transactions can be given alternates as well to make aborting sagas more reliable.
+
+解决此问题的另一个可能的方式是手动干预。错误的事务首先被中止。然后给应用程序猿发出错误描述，程序猿可以纠正它。然后，SEC（或应用程序）重新运行这个事务并且继续处理这个saga。
+
+>The other possible solution to this problem is manual intervention. The erroneous transaction is first aborted. Then it is given to an application programmer who, given a description of the error, can correct it. The SEC (or the application) then reruns the transaction and continues processing the saga.
+
+
+幸运的是，在手动修复事务时，saga并不持有任何数据库资源（比如锁）。因此，已经时间很长的saga将需要更长的时间，但实际不会对其他事务的性能产生重大影响。
+
+>Fortunately, while the transaction is being manually repaired the saga does not hold any database resources (i.e., locks). Hence, the fact that an already long saga will take even longer will not significantly affect performance of other transactions. 
+
+依靠人工干预绝对不是一个优雅的解决方案，但它是一个实用的解决方案。剩下的替代方案是将saga作为一个长期的事务来运行。当此LLT遇到错误时，它将完全中止，可能会浪费更多的精力。 此外，仍然必须手动纠正错误并重新提交LLT。 唯一的好处是在修复期间，LLT将是系统未知的。 在这个saga的情况下，在安装修复的事务之前，saga将继续在系统中挂起。
+
+>Relying on manual intervention is definitely not an elegant solution, but it is a practical one. The remaining alternative is to run the saga as a long transaction. When this LLT encounters an error it will be aborted in its entirety, potentially wasting much more effort. Furthermore, the bug will still have to be corrected manually and the LLT resubmitted. The only advantage is that during the repair, the LLT will be unknown to the system. In the case of a saga, saga will continue to be pending in the system until the repaired transaction is installed.
+
 
 
