@@ -377,9 +377,9 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 
 >To arrive at a consistent set of save-points, the SEC must again be informed of process forking and joining. The information must be stored on the log and analyzed at recovery time. The SEC chooses the latest save-point within each process of the saga such that no earlier transaction has been compensated for. (A transaction is earlier than a save-point if it would have to be compensated for after a transaction that had executed in place of that save-point). If there is no such save-point in a process, that entire process must be rolled back. For those processes with save-points, the necessary backward recoveries can be conducted and the processes restarted.
 
-##9. 设计SAGAS
+## 9. 设计SAGAS
 
->##9. DESIGNING SAGAS
+>## 9. DESIGNING SAGAS
 
 我们描述的saga处理机制只有在应用程序猿将他们的LLT编写为saga时才有用。因此，随之而来的问题：程序猿如何知道一个指定的LLT是否可以被安全的分解为一系列有序的事务？程序猿如何选择断点？写补偿事务有多苦难？在本节中，我们将讨论其中的一些问题。
 
