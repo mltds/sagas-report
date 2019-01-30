@@ -298,6 +298,106 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 >Relying on manual intervention is definitely not an elegant solution, but it is a practical one. The remaining alternative is to run the saga as a long transaction. When this LLT encounters an error it will be aborted in its entirety, potentially wasting much more effort. Furthermore, the bug will still have to be corrected manually and the LLT resubmitted. The only advantage is that during the repair, the LLT will be unknown to the system. In the case of a saga, saga will continue to be pending in the system until the repaired transaction is installed.
 
 
+## 7. 在现有DBMS之上实现SAGAS
 
+>## 7. IMPLEMENTING SAGAS ON TOP OF AN EXISTING DBMS
+
+在我们讨论saga管理器时，我们假设SEC是DBMS的一部分，可以直接访问日志。但是，在某些情况下，是可能可以在不支持sagas的现有DBMS上运行sagas的。只要数据库能够存储大型非结构化对象（即代码和存储点），但是，它涉及到给应用程序猿更多的责任，并可能损害性能。
+
+>In our discussion of saga management we have assumed that the SEC is part of the DBMS and has direct access to the log. However, in some cases it may be desirable to run sagas on an existing DBMS that does not directly support them. This is possible as long as the database can store large unstructured objects (i.e., code and save-points). However, it involves giving the application programmer more responsibilities and possibly hurting performance.
+
+基本上有两件事要做。首先, 嵌入在应用程序代码中的saga命令成为子程序调用 (相对于系统调用)。(子例程与应用程序代码一起加载。)每个子程序都存储在数据库中sec 将存储在日志中的所有信息。例如, begin-saga 子程序将在活动 sagas 的数据库表中输入该saga的标识。Save-point子程序将导致应用程序将其状态 (或其状态的关键部分) 保存在类似的数据库表中。同样, end-transaction子程序在执行结束交易系统调用之前进入其他一些表, 即结束事务的标识及其补偿事务 (由 TEC 处理)
+
+>There are basically two things to do. First, the saga commands embedded in the application code become subroutine calls (as opposed to system calls). (The subroutines are loaded together with the application code.) Each subroutine stores within the data-base all the information that the SEC would have stored in the log. For example, the begin-saga subroutine would enter an identification for the saga in a database table of active sagas. The save-point subroutine would cause the application to save its state (or a key portion of its state) in a similar database table. Similarly, the end- transaction subroutine enters into some other table(s), the identification of the ending transaction and its compensating transaction before executing an end-transaction system call( to be processed by the TEC).
+
+在数据库中存储saga信息的命令（存储点除外）必须始终在事务中执行，否则信息可能会在崩溃中丢失。因此，saga子程序必须跟踪saga当前是否正在执行事务。如果开始事务设置了一个标志然后被结束事务重置，那么依靠事务是一种很容易实现方式。如果未设置标志，则禁止所有数据库的存储操作。请注意, 子程序方法仅在应用程序代码从不自行进行系统调用的情况下才有效。例如, 如果事务因系统调用end-transaction (而不是子例程调用) 而终止, 则不会记录补偿信息, 也不会重置事务标志。
+
+>The commands to store saga information (except save-point) in the database must always be performed within a transaction else the information may be lost in a crash. Thus, the saga subroutines must keep track of whether the saga is currently executing a transaction or not. This can easily be achieved if the begin-transaction subroutine sets a flag that is reset by the end-transaction one. All database storage actions would be disallowed if the flag is not set. Note that the subroutine approach only works if the application code never makes system calls on its own. For instance, if a transaction is terminated by an end-transaction system call (and not a subroutine call), then the compensating information will not be recorded and the transaction flag will not be reset.
+
+其次，必须有一个特殊的程序来实现SEC的其他职能。这个程序，这个 saga daemon（SD）将始终处于活跃状态。它在崩溃后会因操作系统而重启。崩溃后，它将扫描saga表，找出挂起状态的sagas。这个扫描将通过提交一个数据库事务来执行。只有在事务恢复完成后，TEC才会执行此事务。 因此，SD将读取一致性的数据。一旦SD知道了待处理的saga的状态，它就会发起必要的补偿或正常的事务，就像SEC恢复后所做的那样。必须注意在SD提交其数据库查询之前，不要干扰sagas崩溃后的正常启动。
+
+>Second, a special process must exist to implement the rest of the SEC functions. This process, the saga daemon (SD) would always be active. It would be restarted after a crash by the operating system. After a crash it would scan the saga tables to discover the status of pending sagas. This scan would be performed by submitting a database transaction. The TEC will only execute this transaction after transaction recovery is complete; hence the SD will read consistent data. Once the SD knows the status of the pending sagas, it issues the necessary compensating or normal transactions, just as the SEC would have after recovery. Care must be taken not to interfere with sagas that started right after the crash, but before the SD submitted its database query.
+
+在TEC中止事务（例如，由于死锁或用户引起的中止）后，它可能只是中止这个事务的处理。在一个传统的系统，这可能是好的，但在saga中它导致saga其他工作没有完成。如果再这种情况发生时，TEC无法向SD发出信号，则SD必须定期扫描saga表，以发现这种情况。如果发现了，将立即采取纠正措施。
+
+>After the TEC aborts a transaction (e.g., because of a deadlock or a user initiated abort), it may simply kill the process that initiated the transaction. In a conventional system this may be fine, but with sagas this leaves the saga unfinished. If the TEC cannot signal the SD when this occurs, then the SD will have to periodically scan the saga table searching for such a situation. If found, the corrective action is immediately taken.
+
+正在运行的saga也可以直接向SD发起请求。例如，若要执行中止saga，这个中止saga子程序将请求发送到SD，然后（如果有必要）执行中止事务。
+
+>A running saga can also directly request services from the SD. For instance, to perform an abort-saga, the abort-saga subroutine sends the request to the SD and then (if necessary) executes an abort-transaction.
+
+
+##8. 并行SAGAS
+
+>##8. PARALLEL SAGAS
+
+我们在saga中执行顺序事务的模型可以扩展到包括并行事务。在saga天然支持并发事务在应用程序中是很有用的。例如，在处理采购订单时，最好同时生成装运订单并更新应收账款。
+
+>Our model for sequential transaction execution within a saga can be extended to include parallel transactions. This could be useful in an application where the transactions of a saga are naturally executed concurrently. For example, when processing a purchase order, it may be best to generate the shipping order and update accounts receivable at the same time.
+
+我们假设saga进程（父进程）可以创建新的进程（子进程），他们可以并行，请求类似于UNIX中的分岔请求。该系统还可以提供join功能，以组合saga中的流程。
+
+>We will assume that a saga process (the parent) can create new processes (children) with which it will run in parallel, with a request similar to a fork request in UNIX. The system may also provide a join capability to combine processes within a saga.
+
+并发saga的逆向的崩溃恢复类似于有序的sagas。在并发saga中的每个处理，事务都按照相反的顺序进行补偿（或撤销），就像使用有序saga一样。此外，当父进程执行了一些事务后创建了子进程，那么必须将子进程的补偿完成后，才能执行父进程的补偿。 (请注意, 只有有序执行的事务限制了补偿的顺序。如果 T1T2 已在并行进程中执行, T2 读取了 T1 写入的数据, 补偿了 T1并不强迫我们先补偿 T2。)
+
+>Backward crash recovery for parallel sagas is similar to that for sequential sagas. Within each process of the parallel saga, transactions are compensated for (or undone) in reverse order just as with sequential sagas. In addition all compensations in a child process must occur before any compensations for transactions in the parent that were executed before the child was created (forked). (Note that only transaction execution order within a process and fork and join information constrain the order of compensation. If T1 and T2 have executed in parallel processes and T2 has read data written by T1, compensating for T1 does not force us to compensate for T2 first.)
+
+不同于逆向崩溃恢复，逆向恢复一个失败的并发的saga更为复杂，因为saga可能有多个程序组成，所有这些都必须中止。~ For this, it is convenient to route all process fork and join operations through the SEC so it can keep track of the process structure of the saga. ~ 当其中一个saga程序请求abort-saga，这个SEC姜夔杀死所有涉及的过程中的saga。然后, 它将中止所有等待的事务并补偿所有已提交的事务。
+
+
+>Unlike backward crash recovery, backward recovery from a saga failure is more complicated with parallel sagas because the saga may consist of several processes, all of which must be terminated. For this, it is convenient to route all process fork and join operations through the SEC so it can keep track of the process structure of the saga. When one of the saga processes requests an abort-saga, the SEC kills all processes involved in the saga. It then aborts all pending transactions and compensates all committed ones.
+
+因为有可能存在“不一致”的保存点，正向恢复更加复杂。为了说明这一点，请思考图8.1中的saga。每个框表示一个进程；每个框都有进程需要有序执行的事务和存储点（SP）。下面的那个进程是在T1提交后fork的。假设T3和T5是当前正在执行的事务，并且保存点在T1和T5之前执行的。
+
+>Forward recovery is even more complicated due to the possibility of “inconsistent” save-points. To illustrate, consider the saga of Figure 8.1. Each box represents a process; within each box is the sequence of transactions and save-points (sp) executed by the process. The lower process was forked after T1 committed. Suppose that T3 and T5 are the currently executing transactions and that save-points were executed before T1 and T5.
+
+
+
+---------------------------------  
+|    T0-->sp-->T1-->T2-->T3    |  
+---------------|-----------------  
+　　　　　　　　　|  
+　　　　　　　　　|　　｜--------------------------|  
+　　　　　　　　　|----> 　　　T4 --> sp --> T5    |  
+　　　　　　　　　　　　|--------------------------|  
+
+　　　　　　Figure 8.1
+
+
+在此时系统失败。上面的进程将会在T1前面重启。因此，第二个进程所做的保存点是没用的。它取决于T1的补偿的执行情况。
+
+>At this point the system fails. The top process will have to be restarted before T1. Therefore, the save-point made by the second process is not useful. It depends on the execution of T1 which is being compensated for.
+
+此问题称为级联回滚。在流程通过消息 [rand78a] 进行通信的情况下, 对问题进行了分析。在那里, 可以分析存储点依赖关系, 以获得一组一致的存储点 (如果存在)。然后, 一致的集可用于重新启动进程。对于并行 sagas, 情况更加简单, 因为存储点依赖关系仅通过分叉和联接以及进程中的事务和存储点顺序产生。
+
+>This problem is known as cascading roll backs. It problem has been analyzed in a scenario where processes communicate via messages [Rand78a]. There it is possible to analyze save-point dependencies to arrive at a consistent set of save-points (if it exists). The consistent set can then be used to restart the processes. With parallel sagas, the situation is even simpler since save-point dependencies arise only through forks and joins, and transaction and save-point order within a process.
+
+为了达成一套一致的存储点，SEC必须被告知程序的fork和join。这个信息必须存储在日志中，并在恢复时进行分析。SEC会在saga的每个程序中选择最新的存储点，这样更早的事务就不会补偿。（如果事务在存储点之前执行，但在存储点被加载后，这个事务必须要补偿）。如果程序中没有这样的存储点，则必须回滚整个程序。对于具有存储点的程序，可以进行必要的逆向恢复并重启整个程序。
+
+>To arrive at a consistent set of save-points, the SEC must again be informed of process forking and joining. The information must be stored on the log and analyzed at recovery time. The SEC chooses the latest save-point within each process of the saga such that no earlier transaction has been compensated for. (A transaction is earlier than a save-point if it would have to be compensated for after a transaction that had executed in place of that save-point). If there is no such save-point in a process, that entire process must be rolled back. For those processes with save-points, the necessary backward recoveries can be conducted and the processes restarted.
+
+##9. 设计SAGAS
+
+>##9. DESIGNING SAGAS
+
+我们描述的saga处理机制只有在应用程序猿将他们的LLT编写为saga时才有用。因此，随之而来的问题：程序猿如何知道一个指定的LLT是否可以被安全的分解为一系列有序的事务？程序猿如何选择断点？写补偿事务有多苦难？在本节中，我们将讨论其中的一些问题。
+
+>The saga processing mechanisms we have described will only be of use if application programmers write their LLTs as sagas. Thus the following questions immediately arise: How can a programmer know if a given LLT can be safely broken up into a sequence of transactions? How does the programmer select the break points? How difficult is it to write compensating transactions ? In this section we will address some of these issues.
+
+要辨别出潜在的子事务，必须寻求正在执行工作的自然划分边界。在许多情况中，LLT模型是一系列现实世界的动作，其中每个动作都saga子事务的候选人。举个栗子：当大学生毕业时，必须采取若干行动，才能颁发文凭：图书馆必须检查没有未归还的书籍，必须检查住房账单和学费都核对通过，学生的新地址必须被记录下来；显然，这些现实世界中的每个操作都可以成为一个事务模型。
+
+>To identify potential sub-transactions within a LLT, one must search for natural divisions of the work being performed. In many cases, the LLT models a series of real world actions, and each of these actions is a candidate for a saga transaction. For example, when a university student graduates several actions must be performed before his or her diploma can be issued: the library must check that no book are out, the controller must check that all housing bills and tuition bills are checked; the students new address must be recorded; and so on. Clearly each of these real world actions can be modeled by a transaction.
+
+在其他情况下，数据库本身作为自然的相对独立的组件，并可以将每个组件上的操作分组为saga的事务。举个栗子，考虑下大型操作系统的源码。通常，操作系统及其程序可以分为调度程序、内存管理器、中断处理程序等组件。一个LLT是向操作系统添加一个跟踪工具，这个跟踪工具可以分解到每个组件上，每一个作为有一个事务。同样，如果员工数据可以按工厂位置来切分，那么给员工发放生活费补贴的LLT也可以按照工厂进行拆分。
+
+>In other cases, it is the database itself that is naturally partitioned into relatively independent components, and the actions on each component can be grouped into a saga transaction. For example, consider the source code for a large operating system. Usually the operating system and its programs can be divided into components like the scheduler, the memory manager, the interrupt handlers, etc. A LLT to add a tracing facility to the operating system can be broken up so that each transaction adds the tracing code to one of the components. Similarly if the data on employees can be split by plant location, then a LLT to give a cost-of-living raise to all employees can be broken up by plant location.
+
+为LLT设计补偿事务是一个非常普遍的难题。（例如，如果事务触发一枚导弹，则可能无法撤销此操作）。然而，对于许多实际应用来说，它可能和编写事务本身一样简单（或困难）。事实上Gray在[Gray81a]中指出，在应用程序中事务通常有相应配套的补偿事务。特别是类似真实世界的可以撤销的事务模型，例如预定一个出租车或者商场购物下单。在这种情况下，编写补偿事务或普通事务非常相似：程序员必须编写执行操作的代码并保证数据库一致性约束。
+
+ 
+>Designing compensating transactions for LLTs is a difficult problem in general. (For instance, if a transaction fires a missile, it may not be possible to undo this action). However, for many practical applications it may be as simple (or difficult) as writing the transactions themselves. In fact, Gray notes in [Gray81a] that, transactions often have corresponding compensating transactions within the application transaction set. This is especially true when the transaction models a real world action that can be undone, like reserving a rental car or issuing a shipping order. In such cases, writing either a compensating or a normal transaction is very similar: the programmer must write code that performs the action and preserves the database consistency constraints.
+
+//TODO
 
 
