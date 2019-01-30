@@ -327,9 +327,9 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 >A running saga can also directly request services from the SD. For instance, to perform an abort-saga, the abort-saga subroutine sends the request to the SD and then (if necessary) executes an abort-transaction.
 
 
-##8. 并行SAGAS
+## 8. 并行SAGAS
 
->##8. PARALLEL SAGAS
+>## 8. PARALLEL SAGAS
 
 我们在saga中执行顺序事务的模型可以扩展到包括并行事务。在saga天然支持并发事务在应用程序中是很有用的。例如，在处理采购订单时，最好同时生成装运订单并更新应收账款。
 
