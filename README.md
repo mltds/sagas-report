@@ -152,7 +152,7 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 
 >In particular, when an application program wishes to initiate a saga it issues a begin-saga command to the system. This is followed by a series of begin-transaction, end-transaction commands that indicate the boundaries of each transaction. In between these commands the application program would issue conventional database access commands. From within a transaction, the program can optionally start a user-initiated abort by issuing an abort-transaction command. This terminates the current transaction, but not the saga. Similarly, there is an abort-saga command to abort first the currently executing transaction and second the entire saga (by running compensating transactions). Finally, there is an end-saga command to commit the currently executing transaction (if any) and to complete the saga.
 
-这些命令中的大多数将包括各种参数。 begin-saga命令可以将saga标识符返回给程序。 然后，该标识符可以在saga进行的后续调用中传递给系统。 ~An abort-transaction command will include as a parameter the address where saga execution is to continue after the abortion. Each end-transaction call includes the identification of the compensating transaction that must be executed in case the currently ending transaction must be rolled back. The identification includes the name and entry point of the compensating program, plus any parameters that the compensating transaction may need~ (译者注：这段不知道怎么翻译)。（我们假设每个补偿程序都包含他自己的开始事务和结束事务方法。在补偿事务中，abort-transaction 和 abort-saga 命令不允许执行。）最后，这个 abort-saga 命令可能包含着一个存储点作为参数，如下所述。
+这些命令中的大多数将包括各种参数。 begin-saga命令可以将saga标识符返回给程序。 然后，该标识符可以在saga进行的后续调用中传递给系统。这些命令中的大多数将包括各种参数。 begin-saga命令可以将saga标识符返回给程序。 然后，该标识符可以在saga进行的后续调用中传递给系统。abort-transaction命令包含在中止后saga从哪里继续执行的地址作为其参数。end-transaction命令包含当前事务回滚所需补偿事务的标识符，该标识符包括补偿事务的名称与程序入口，以及各种可能会用到的参数。（我们假设每个补偿程序都包含他自己的开始事务和结束事务方法。在补偿事务中，abort-transaction 和 abort-saga 命令不允许执行。）最后，这个 abort-saga 命令可能包含着一个存储点作为参数，如下所述。
 
 >Most of these commands will include various parameters. The begin-saga command can return a saga identifier to the program. This identifier can then be passed to the system on subsequent calls made by the saga. An abort-transaction command will include as a parameter the address where saga execution is to continue after the abortion. Each end-transaction call includes the identification of the compensating transaction that must be executed in case the currently ending transaction must be rolled back. The identification includes the name and entry point of the compensating program, plus any parameters that the compensating transaction may need. (We assume that each compensating program includes its own begin-transaction and end-transaction calls. Abort-transaction and abort-saga commands are not allowed within a compensating transaction.) Finally, the abort-saga command may include as a parameter a save-point identifier, as described below.
 
@@ -395,9 +395,43 @@ Sagas还可以被视为在[Garc83a, Lync83a]中描述的机制下运行的特殊
 
 为LLT设计补偿事务是一个非常普遍的难题。（例如，如果事务触发一枚导弹，则可能无法撤销此操作）。然而，对于许多实际应用来说，它可能和编写事务本身一样简单（或困难）。事实上Gray在[Gray81a]中指出，在应用程序中事务通常有相应配套的补偿事务。特别是类似真实世界的可以撤销的事务模型，例如预定一个出租车或者商场购物下单。在这种情况下，编写补偿事务或普通事务非常相似：程序员必须编写执行操作的代码并保证数据库一致性约束。
 
- 
 >Designing compensating transactions for LLTs is a difficult problem in general. (For instance, if a transaction fires a missile, it may not be possible to undo this action). However, for many practical applications it may be as simple (or difficult) as writing the transactions themselves. In fact, Gray notes in [Gray81a] that, transactions often have corresponding compensating transactions within the application transaction set. This is especially true when the transaction models a real world action that can be undone, like reserving a rental car or issuing a shipping order. In such cases, writing either a compensating or a normal transaction is very similar: the programmer must write code that performs the action and preserves the database consistency constraints.
 
+
+虽然困难但上述这些仍是可以实现的，例如寄信或者打印支票，寄信完了想撤回可以再寄一封说明，支票印完了想反悔可以赶紧向银行发个信息让他们终止操作。当然最好不要有这种，单如果按常规方式处理代价很高的话，那么开发者就往往不得不采用这种方式。
+
+>It may even be possible to compensate for actions that are harder to undo, like sending a letter or printing a check. For example, to compensate for the letter, send a second letter explaining the problem. To compensate for the check, send a stop-payment message to the bank. Of course, it would be desirable not to have to compensate for such actions. However, the price of running LLTs as regular transactions may be so high that one is forced to write sagas and their compensating transactions.
+
+当然，正向补偿可以避免这种（见第五部分），因此如果这种补偿机制很难写的话，考虑把应用适配成能够采用纯正向补偿的，这样就可以避开类似的中止操作了。
+
+> Also recall that pure forward recovery does not require compensating transactions (see Section 5). So if compensating transactions are hard to write, then one has the choice of tailoring the application so that LLTs do not have user initiated aborts. Without these aborts, pure forward recovery is feasible and compensation is never needed.
+
+正如我们所讨论的，DB的结构在saga设计中扮演着关键角色，因此最好不要孤立地研究每种LLT，而是在设计数据库时就把如何适配LLT和saga考虑进去。如果DB能被设计成一套松散链接的组件（加上一点儿简单的组件内一致性约束），那么LLT应该就能自然而然地以子事务形式被组织在一起。
+
+> As has become clear from our discussion, the structure of the database plays an important role in the design of sagas. Thus, it is best not to study each LLT in isolation, but to design the entire database with LLTs and sagas in mind. That is, if the database can be laid out into a set of loosely-coupled components (with few and simple inter-component consistency constraints, then it is likely that the LLT will naturally break up into sub-transactions that can be interleaved.
+
+另一项对于转换LLT而言可能比较有用的手段是将LLT所涉及到的临时数据存储在数据库内部。为了说明这点，考虑一个包含三个子事务T1,T2,T3的LLT，记为L。在T1中，L执行一些操作，然后从数据库中存储的账户条目中取出一些钱。这一金额暂时存储在临时本地变量中，直到T3才将这部分钱写入到另一个（或几个）账户里。T1完成后，数据库处于不一致状态：一部分钱“消失”了，即无法在数据库中查到这部分金额。因此，L不能被视为saga运行。如果这样的话，在T1至T3之间运行、需要查询全部金额的操作（例如审计）就无法查询到全部资金了。如果L作为普通事务执行，那么审计操作就需要排队等L结束。这虽保证了一致性但却损害了性能。
+
+> Another technique that could be useful for converting LLTs into sagas involves storing the temporary data of an LLT in the database itself. To illustrate, consider a LLT L with three sub-transactions T1, T2, and T3. In Ti, L performs some actions and then withdraws a certain amount of money from an account stored in the database. This amount is stored in a temporary, local variable until during T3 the funds are placed in some other account(s). After Ti completes, the database is left in an inconsistent state because some money is"missing,"i.e, it cannot be found in the database. Therefore, L cannot be run as a saga. If it were, a transaction that needed to see all the money (say an audit transaction) could run sometime between Ti and T3 and would not find all the funds, If L is run as a regular transaction, then the audit is delayed until L completes. This guarantees consistency but hurts performance.
+
+然而，如果不是将这部分钱存到L本地，而是存到数据库中，那么数据库就一致了，其他事务也可以同时运行。为实现这点，我们必须将【临时存储】概念引入到数据库中（例如为处于中间状态或用作”保险“目的的资金加入一种关系）另外，需要查询到全部金额的事务必须知道这个新的存储。因此最好能在设计数据库的时候就把这个临时存储考虑进去，而不是事后再往里加。
+
+> However, if instead of storing the missing money in local storage L stores it in the database, then the database would be consistent, and other transactions could be interleaved. To achieve this we must incorporate into the database schema the “temporary"storage (e.g, we add a relation for funds in transit or for pending insurance claims). Also, transactions that need to see all the money must be aware of this new storage. Hence it is best if this storage is defined when the database is first designed and not added as an afterthought.
+
+如果L没有T2事务的前提下，在数据库中写入少的这部分金额会变得非常方便，但这种情况下L会在T1执行后释放掉对临时存储的锁，然后等到T3时才重新再去申请它们。这会给L增加一些额外开销，但作为汇报，需要查看全部金额的事务得以在T1之后更快地运行，这有点儿像让冗长事务为小事务让道。为此必须暂时释放对资源的占有。
+
+> Even if L had no T2 transaction, writing the missing funds in the database may be convenient. Notice that in this case L would release the locks on the temporary storage after Ti, only to immediately request them again in T3. This may add some overhead to L, but in return for this transactions that are waiting to see the funds will be able to proceed sooner, after T1. This is analogous to having a person with a huge photocoping job periodically step aside and let shorter jobs through. For this the coveted resources, i.e., the coping machine or the funds, must be temporarily released.
+
+我们认为上述的”钱“和LLT L的总体陈述是成立的。数据库和LLT应被设计得能在一个子事务向另一个子事务传递最少的本地存储数据。这项技术与结构化数据库相结合，就可以将LLT作为saga写入了。
+
+> We believe that what we have stated in terms of money and LLT L holds in general. The database and the LLTs should be designed so that data passed from one sub-transaction to the next via local storage is minimized. This technique, together with a well structured database, can make it possible to write LLT's as sagas.
+
+##10.结论
+
+>## 10.CONCLUSIONS
+
+我们展示了saga的概念：一个长时间存活大事务能够被分割成若干小事务且执行时被视为一个整体。其概念和实现均相对简单且实用。我们认为saga的实现机制能够用相对较小的代价实现出来（以数据库的一部分或者以附加设施的形式）。这一机制可以被用于处理大量可被视为SAGA的LLT，并显著提高处理性能。
+
+> We have presented the notion of saga, a long lived transaction that can be broken up into transactions, but still executed as a unit. Both the concept and its implementation are relatively simple, but in its simplicity lies its usefulness. We believe that a saga processing mechanism can be implemented with relatively little effort, either as part of the DBMS or as an added-on facility. The mechanism can then be used by the large number of LLTs that are sagas to improve performance significantly.
+
 //TODO
-
-
